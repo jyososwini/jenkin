@@ -1,46 +1,51 @@
 pipeline {
     agent any
 
+    environment {
+        IMAGE_NAME = "prasad67/maven-web-app"
+    }
+
     stages {
 
-        stage('Clone') {
+        stage('Checkout Code') {
             steps {
-                git ''
+                checkout scm
             }
         }
 
-        stage('Maven Build') {
+        stage('Build WAR') {
             steps {
                 sh 'mvn clean package'
             }
         }
 
-        stage('Stop & Remove Old Container') {
+        stage('Build Docker Image') {
             steps {
                 sh '''
-                docker stop azure || true
-                docker rm azure || true
+                  docker build -t $IMAGE_NAME:${BUILD_NUMBER} .
                 '''
             }
         }
 
-        stage('Remove Old Image') {
+        stage('Login to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh '''
+                      echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    '''
+                }
+            }
+        }
+
+        stage('Push Image to Docker Hub') {
             steps {
                 sh '''
-                docker rmi amazon || true
+                  docker push $IMAGE_NAME:${BUILD_NUMBER}
                 '''
-            }
-        }
-
-        stage('Docker Image Build') {
-            steps {
-                sh 'docker build -t amazon .'
-            }
-        }
-
-        stage('Docker Deploy') {
-            steps {
-                sh 'docker run -d -p 6060:8080 --name azure amazon'
             }
         }
     }
